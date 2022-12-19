@@ -42,6 +42,8 @@ module Parallel = struct
     let await x = Task.await pool x in
     match String.length s, String.length t with
     | 0, x | x, 0 -> x
+    | len_s, len_t when len_s < 10 && len_t < 10 ->
+        Sequential.edit_distance s t
     | len_s, len_t ->
       let s' = String.drop_suffix s 1 in
       let t' = String.drop_suffix t 1 in
@@ -76,6 +78,6 @@ let () =
        | Distance (seq_or_par, a, b) ->
          (match seq_or_par with
           | Seq -> printf "%d\n" (Sequential.edit_distance a b : int)
-          | Par -> printf "%d\n" (Parallel.edit_distance ~num_domains a b : int)))
+          | Par -> printf "%d\n" (Parallel.edit_distance ~num_domains:(num_domains - 1) a b : int)))
   |> Command_unix.run
 ;;
