@@ -65,10 +65,10 @@ module Parallel = struct
 
   let edit_distance pool seq_ed f (s, t) =
     let async f = Task.async pool f in
-    let await x = Task.await pool x in
+    let _await x = Task.await pool x in
     match SuffixString.length s, SuffixString.length t with
     | 0, x | x, 0 -> x
-    | len_s, len_t when len_s * len_t < 400_000_000 -> seq_ed (s, t)
+    | len_s, len_t when len_s < 4500 || len_t < 4500 -> seq_ed (s, t)
     | len_s, len_t ->
         let s' = SuffixString.drop_suffix s 1 in
         let t' = SuffixString.drop_suffix t 1 in
@@ -77,11 +77,13 @@ module Parallel = struct
                         (SuffixString.get t (len_t - 1))
           then 0 else 1
         in
-        let d1 = async (fun () -> f (s', t) + 1) in
-        let d2 = async (fun () -> f (s, t') + 1) in
-        let d3 = async (fun () -> f (s', t') + cost_to_drop_both) in
+        ignore @@ async (fun () -> f (SuffixString.(drop_suffix s (length s / 2), t)));
+        ignore @@ async (fun () -> f (SuffixString.(s, drop_suffix t (length t / 2))));
+        let d1 = f (s', t) + 1 in
+        let d2 = f (s, t') + 1 in
+        let d3 = f (s', t') + cost_to_drop_both in
         let ( ++ ) = Int.min in
-        await d1 ++ await d2 ++ await d3
+        d1 ++ d2 ++ d3
 
   let edit_distance ~get ~set ~num_domains seq_ed s t =
     let pool = Task.setup_pool ~num_domains () in
