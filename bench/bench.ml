@@ -63,7 +63,7 @@ end
 module Parallel = struct
   module Task = Domainslib.Task
 
-  let edit_distance f (seq_ed, pool, s, t) =
+  let edit_distance pool seq_ed f (s, t) =
     let async f = Task.async pool f in
     let await x = Task.await pool x in
     match SuffixString.length s, SuffixString.length t with
@@ -77,16 +77,16 @@ module Parallel = struct
                         (SuffixString.get t (len_t - 1))
           then 0 else 1
         in
-        let d1 = async (fun () -> f (seq_ed, pool, s', t) + 1) in
-        let d2 = async (fun () -> f (seq_ed, pool, s, t') + 1) in
-        let d3 = async (fun () -> f (seq_ed, pool, s', t') + cost_to_drop_both) in
+        let d1 = async (fun () -> f (s', t) + 1) in
+        let d2 = async (fun () -> f (s, t') + 1) in
+        let d3 = async (fun () -> f (s', t') + cost_to_drop_both) in
         let ( ++ ) = Int.min in
         await d1 ++ await d2 ++ await d3
 
   let edit_distance ~get ~set ~num_domains seq_ed s t =
     let pool = Task.setup_pool ~num_domains () in
-    let ed = Memo.memo_rec ~get ~set edit_distance in
-    let res = Task.run pool (fun () -> ed (seq_ed, pool, s, t)) in
+    let ed = Memo.memo_rec ~get ~set (edit_distance pool seq_ed) in
+    let res = Task.run pool (fun () -> ed (s, t)) in
     Task.teardown_pool pool;
     res
   ;;
@@ -118,9 +118,7 @@ let () =
            let seq_ed = Memo.memo_rec ~get ~set Sequential.edit_distance in
            (match seq_or_par with
              | Seq -> printf "%d\n" (seq_ed (a, b) : int)
-             | Par -> printf "%d\n" (Parallel.edit_distance
-                 ~get:(fun (_,_,a,b) -> get (a,b))
-                 ~set:(fun (_,_,a,b) v -> set (a,b) v)
+             | Par -> printf "%d\n" (Parallel.edit_distance ~get ~set
                  ~num_domains:(num_domains - 1) seq_ed a b : int)))
   |> Command_unix.run
 ;;
