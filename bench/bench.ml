@@ -96,14 +96,14 @@ let () =
      fun () ->
        match benchmark with
        | Distance (seq_or_par, a, b) ->
-           let a = SuffixString.mk a in
-           let b = SuffixString.mk b in
+           let open SuffixString in
+           let a = mk a in
+           let b = mk b in
            let table =
-             Array.make_matrix ~dimx:(SuffixString.length a + 1)
-             ~dimy:(SuffixString.length b + 1) (-1)
+             Array.make_matrix ~dimx:(length a + 1) ~dimy:(length b + 1) (-1)
            in
-           let get (a,b) = table.(SuffixString.length a).(SuffixString.length b) in
-           let set (a,b) res = table.(SuffixString.length a).(SuffixString.length b) <- res in
+           let get (a,b) = table.(length a).(length b) in
+           let set (a,b) res = table.(length a).(length b) <- res in
            let seq_ed = Memo.memo_rec ~get ~set Sequential.edit_distance in
            (match seq_or_par with
              | Seq -> printf "%d\n" (seq_ed (a, b) : int)
