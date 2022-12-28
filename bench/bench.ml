@@ -63,31 +63,23 @@ end
 module Parallel = struct
   module Task = Domainslib.Task
 
-  let r = ref 0
-
-  let edit_distance pool seq_ed f (s, t) =
-    let async f = Task.async pool f in
-    let _await x = Task.await pool x in
-    match SuffixString.length s, SuffixString.length t with
-    | 0, x | x, 0 -> x
-    | _ ->
-        if !r > 2 * Task.get_num_domains pool then seq_ed (s, t)
-        else begin
-          r := !r + 3;
-          let open SuffixString in
-          let s' = drop_suffix s (length s / 2) in
-          let t' = drop_suffix t (length t / 2) in
-          ignore @@ async (fun () -> f (s', t'));
-          ignore @@ async (fun () -> f (s', t));
-          ignore @@ async (fun () -> f (s, t'));
-          seq_ed (s,t)
-        end
-
-  let edit_distance ~get ~set ~num_domains seq_ed s t =
-    Printf.printf "length: %d %d\n" (SuffixString.length s) (SuffixString.length t);
+  let edit_distance ~num_domains seq_ed s t =
     let pool = Task.setup_pool ~num_domains () in
-    let ed = Memo.memo_rec ~get ~set (edit_distance pool seq_ed) in
-    let res = Task.run pool (fun () -> ed (s, t)) in
+    let async = Task.async pool in
+    let rec helper depth s t =
+      if depth > 3 then ignore @@ seq_ed (s,t)
+      else begin
+        let open SuffixString in
+        let s' = drop_suffix s (length s / 2) in
+        let t' = drop_suffix t (length t / 2) in
+        ignore @@ async (fun _ -> helper (depth+1) s' t');
+        ignore @@ async (fun _ -> helper (depth+1) s t');
+        ignore @@ async (fun _ -> helper (depth+1) s' t);
+        ignore @@ async (fun _ -> helper (depth+1) s t)
+      end
+    in
+    helper 0 s t;
+    let res = seq_ed (s,t) in
     Task.teardown_pool pool;
     res
   ;;
@@ -115,8 +107,7 @@ let () =
            let seq_ed = Memo.memo_rec ~get ~set Sequential.edit_distance in
            (match seq_or_par with
              | Seq -> printf "%d\n" (seq_ed (a, b) : int)
-             | Par -> printf "%d\n" (Parallel.edit_distance ~get ~set
-                 ~num_domains:(num_domains - 1) seq_ed a b : int)
+             | Par -> printf "%d\n" (Parallel.edit_distance ~num_domains:(num_domains - 1) seq_ed a b : int)
            ))
   |> Command_unix.run
 ;;
