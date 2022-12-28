@@ -63,29 +63,28 @@ end
 module Parallel = struct
   module Task = Domainslib.Task
 
+  let r = ref 0
+
   let edit_distance pool seq_ed f (s, t) =
     let async f = Task.async pool f in
     let _await x = Task.await pool x in
     match SuffixString.length s, SuffixString.length t with
     | 0, x | x, 0 -> x
-    | len_s, len_t when len_s < 4500 || len_t < 4500 -> seq_ed (s, t)
-    | len_s, len_t ->
-        let s' = SuffixString.drop_suffix s 1 in
-        let t' = SuffixString.drop_suffix t 1 in
-        let cost_to_drop_both =
-          if Char.( = ) (SuffixString.get s (len_s - 1))
-                        (SuffixString.get t (len_t - 1))
-          then 0 else 1
-        in
-        ignore @@ async (fun () -> f (SuffixString.(drop_suffix s (length s / 2), t)));
-        ignore @@ async (fun () -> f (SuffixString.(s, drop_suffix t (length t / 2))));
-        let d1 = f (s', t) + 1 in
-        let d2 = f (s, t') + 1 in
-        let d3 = f (s', t') + cost_to_drop_both in
-        let ( ++ ) = Int.min in
-        d1 ++ d2 ++ d3
+    | _ ->
+        if !r > 2 * Task.get_num_domains pool then seq_ed (s, t)
+        else begin
+          r := !r + 3;
+          let open SuffixString in
+          let s' = drop_suffix s (length s / 2) in
+          let t' = drop_suffix t (length t / 2) in
+          ignore @@ async (fun () -> f (s', t'));
+          ignore @@ async (fun () -> f (s', t));
+          ignore @@ async (fun () -> f (s, t'));
+          seq_ed (s,t)
+        end
 
   let edit_distance ~get ~set ~num_domains seq_ed s t =
+    Printf.printf "length: %d %d\n" (SuffixString.length s) (SuffixString.length t);
     let pool = Task.setup_pool ~num_domains () in
     let ed = Memo.memo_rec ~get ~set (edit_distance pool seq_ed) in
     let res = Task.run pool (fun () -> ed (s, t)) in
@@ -111,16 +110,13 @@ let () =
              Array.make_matrix ~dimx:(SuffixString.length a + 1)
              ~dimy:(SuffixString.length b + 1) (-1)
            in
-           let get (a,b) =
-             table.(SuffixString.length a).(SuffixString.length b)
-             in
-           let set (a,b) res =
-             table.(SuffixString.length a).(SuffixString.length b) <- res
-           in
+           let get (a,b) = table.(SuffixString.length a).(SuffixString.length b) in
+           let set (a,b) res = table.(SuffixString.length a).(SuffixString.length b) <- res in
            let seq_ed = Memo.memo_rec ~get ~set Sequential.edit_distance in
            (match seq_or_par with
              | Seq -> printf "%d\n" (seq_ed (a, b) : int)
              | Par -> printf "%d\n" (Parallel.edit_distance ~get ~set
-                 ~num_domains:(num_domains - 1) seq_ed a b : int)))
+                 ~num_domains:(num_domains - 1) seq_ed a b : int)
+           ))
   |> Command_unix.run
 ;;
