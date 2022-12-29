@@ -66,6 +66,9 @@ module Parallel = struct
   let edit_distance ~num_domains seq_ed s t =
     let pool = Task.setup_pool ~num_domains () in
     let async = Task.async pool in
+
+    (* Fill the memo table by computing the edit distance for the 4 quadrants
+     * (recursively, for a small recursion depth) in parallel. *)
     let rec helper depth s t =
       if depth > 3 then ignore @@ seq_ed (s,t)
       else begin
@@ -102,6 +105,12 @@ let () =
            let table =
              Array.make_matrix ~dimx:(length a + 1) ~dimy:(length b + 1) (-1)
            in
+           (* We don't use atomic instructions to read and write to the memo
+              table. The memory model ensures that there are no out-of-thin-air
+              values. Hence, the value in a cell will either be the initial
+              value [-1] or the computed result. Multiple tasks may compute the
+              result for the same cell. But all of them compute the same
+              result. *)
            let get (a,b) = table.(length a).(length b) in
            let set (a,b) res = table.(length a).(length b) <- res in
            let seq_ed = Memo.memo_rec ~get ~set Sequential.edit_distance in
