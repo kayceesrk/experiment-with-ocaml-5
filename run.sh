@@ -23,3 +23,5 @@ hyperfine -r 4 \
 #perf stat -d -d -d ./_build/default/bench/bench.exe 1 "(Distance Par "$a" "$b")"
 #perf stat -d -d -d ./_build/default/bench/bench.exe 2 "(Distance Par "$a" "$b")"
 #perf stat -d -d -d ./_build/default/bench/bench.exe 4 "(Distance Par "$a" "$b")"
+
+#OCAMLRUNPARAM="v=0x400" ./_build/default/bench/bench.exe 4 "(Distance Par "$a" "$b")"
